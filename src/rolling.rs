@@ -56,7 +56,7 @@ impl RollingRequests {
     /// use rollingrequests::rolling::RollingRequests;
     /// use rollingrequests::request::Request;
     /// use reqwest::Method;
-    /// 
+    ///
     /// let mut rolling_requests = RollingRequests::new(5);
     /// let request = Request::new("http://example.com", Method::GET);
     /// rolling_requests.add_request(request);
@@ -105,42 +105,48 @@ impl RollingRequests {
         let mut handles = vec![];
         let mut responses = vec![];
 
-        {
+        let requests_to_process: Vec<Request> = {
             let pending = self.pending_requests.lock().unwrap();
-            for request in pending.iter().take(self.simultaneous_limit) {
-                let client = self.client.clone();
-                let req = request.clone();
+            pending
+                .iter()
+                .take(self.simultaneous_limit)
+                .cloned()
+                .collect()
+        };
 
-                let handle = task::spawn(async move {
-                    let mut req_builder = client.request(req.method.clone(), &req.url);
+        for req in requests_to_process {
+            let client = self.client.clone();
 
-                    if let Some(headers) = &req.headers {
-                        let mut header_map = HeaderMap::new();
-                        for (key, value) in headers {
-                            if let (Ok(header_name), Ok(header_value)) = (
-                                HeaderName::from_bytes(key.as_bytes()),
-                                HeaderValue::from_str(value),
-                            ) {
-                                header_map.insert(header_name, header_value);
-                            }
+            let handle = task::spawn(async move {
+                let mut req_builder = client.request(req.method.clone(), &req.url);
+
+                if let Some(headers) = &req.headers {
+                    let mut header_map = HeaderMap::new();
+                    for (key, value) in headers {
+                        if let (Ok(header_name), Ok(header_value)) = (
+                            HeaderName::from_bytes(key.as_bytes()),
+                            HeaderValue::from_str(value),
+                        ) {
+                            header_map.insert(header_name, header_value);
                         }
-                        req_builder = req_builder.headers(header_map);
                     }
+                    req_builder = req_builder.headers(header_map);
+                }
 
-                    if let Some(data) = &req.post_data {
-                        req_builder = req_builder.body(data.clone());
-                    }
+                if let Some(data) = &req.post_data {
+                    req_builder = req_builder.body(data.clone());
+                }
 
-                    req_builder.send().await
-                });
+                req_builder.send().await
+            });
 
-                handles.push(handle);
-            }
+            handles.push(handle);
         }
 
         for handle in handles {
-            if let Ok(response) = handle.await {
-                responses.push(response);
+            match handle.await {
+                Ok(response) => responses.push(response),
+                Err(e) => eprintln!("Task failed: {:?}", e),
             }
         }
 
