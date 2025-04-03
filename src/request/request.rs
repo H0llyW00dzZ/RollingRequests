@@ -37,6 +37,9 @@ impl Request {
     /// #### Examples
     ///
     /// ```
+    /// use rollingrequests::request::Request;
+    /// use reqwest::Method;
+    /// 
     /// let request = Request::new("http://example.com", Method::GET);
     /// ```
     pub fn new(url: &str, method: Method) -> Self {
