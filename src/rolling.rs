@@ -37,7 +37,7 @@ impl Default for RollingRequestsConfig {
         RollingRequestsConfig {
             simultaneous_limit: 1,            // Default limit
             timeout: Duration::from_secs(30), // Default timeout
-            force_http2: false, // Default false
+            force_http2: false,               // Default false
         }
     }
 }
