@@ -29,6 +29,7 @@ pub struct RollingRequests {
 pub struct RollingRequestsConfig {
     pub simultaneous_limit: usize,
     pub timeout: Duration,
+    pub force_http2: bool,
 }
 
 impl Default for RollingRequestsConfig {
@@ -36,6 +37,7 @@ impl Default for RollingRequestsConfig {
         RollingRequestsConfig {
             simultaneous_limit: 1,            // Default limit
             timeout: Duration::from_secs(30), // Default timeout
+            force_http2: false, // Default false
         }
     }
 }
@@ -47,6 +49,14 @@ pub struct RollingRequestsBuilder {
 
 impl RollingRequestsBuilder {
     /// Creates a new builder with default configuration.
+    ///
+    /// #### Examples
+    ///
+    /// ```
+    /// use rollingrequests::rolling::RollingRequestsBuilder;
+    ///
+    /// let builder = RollingRequestsBuilder::new();
+    /// ```
     pub fn new() -> Self {
         RollingRequestsBuilder {
             config: RollingRequestsConfig::default(),
@@ -54,18 +64,69 @@ impl RollingRequestsBuilder {
     }
 
     /// Sets the simultaneous request limit.
+    ///
+    /// #### Arguments
+    ///
+    /// * `limit` - The maximum number of requests to execute simultaneously.
+    ///
+    /// #### Examples
+    ///
+    /// ```
+    /// use rollingrequests::rolling::RollingRequestsBuilder;
+    ///
+    /// let builder = RollingRequestsBuilder::new().simultaneous_limit(5);
+    /// ```
     pub fn simultaneous_limit(mut self, limit: usize) -> Self {
         self.config.simultaneous_limit = limit;
         self
     }
 
     /// Sets the request timeout duration.
+    ///
+    /// #### Arguments
+    ///
+    /// * `timeout` - The duration to wait before a request times out.
+    ///
+    /// #### Examples
+    ///
+    /// ```
+    /// use rollingrequests::rolling::RollingRequestsBuilder;
+    /// use std::time::Duration;
+    ///
+    /// let builder = RollingRequestsBuilder::new().timeout(Duration::from_secs(10));
+    /// ```
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.config.timeout = timeout;
         self
     }
 
+    /// Forces the use of HTTP/2 for requests.
+    ///
+    /// #### Arguments
+    ///
+    /// * `force` - A boolean indicating whether to force HTTP/2.
+    ///
+    /// #### Examples
+    ///
+    /// ```
+    /// use rollingrequests::rolling::RollingRequestsBuilder;
+    ///
+    /// let builder = RollingRequestsBuilder::new().force_http2(true);
+    /// ```
+    pub fn force_http2(mut self, force: bool) -> Self {
+        self.config.force_http2 = force;
+        self
+    }
+
     /// Builds the `RollingRequests` instance.
+    ///
+    /// #### Examples
+    ///
+    /// ```
+    /// use rollingrequests::rolling::RollingRequestsBuilder;
+    ///
+    /// let rolling_requests = RollingRequestsBuilder::new().build();
+    /// ```
     pub fn build(self) -> RollingRequests {
         RollingRequests::new(self.config)
     }
@@ -90,7 +151,13 @@ impl RollingRequests {
     ///     .build();
     /// ```
     pub fn new(config: RollingRequestsConfig) -> Self {
-        let client = Client::builder().timeout(config.timeout).build().unwrap();
+        let client_builder = Client::builder().timeout(config.timeout);
+
+        let client = if config.force_http2 {
+            client_builder.http2_prior_knowledge().build().unwrap()
+        } else {
+            client_builder.build().unwrap()
+        };
 
         RollingRequests {
             simultaneous_limit: config.simultaneous_limit,
