@@ -183,4 +183,76 @@ mod tests {
             }
         }
     }
+
+    #[tokio::test]
+    async fn test_rolling_requests_put_data() {
+        let _m1 = mock("PUT", "/put")
+            .with_status(200)
+            .match_header("content-type", "application/json")
+            .match_body(r#"{"key": "value"}"#)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"status": "updated"}"#)
+            .create();
+
+        let mut rolling_requests = RollingRequestsBuilder::new()
+            .simultaneous_limit(1)
+            .timeout(Duration::from_millis(1))
+            .build();
+
+        let url = &mockito::server_url();
+        let mut request = Request::new(&format!("{}/put", url), Method::PUT);
+        request.set_post_data(Some(r#"{"key": "value"}"#));
+
+        // Set the content-type header
+        let mut headers = std::collections::HashMap::new();
+        headers.insert("content-type".to_string(), "application/json".to_string());
+        request.set_headers(headers);
+
+        rolling_requests.add_request(request);
+
+        let responses = rolling_requests.execute_requests().await;
+        assert_eq!(responses.len(), 1);
+
+        for response in responses {
+            assert!(response.is_ok());
+            let text = response.unwrap().text().await.unwrap();
+            assert!(text.contains("\"status\": \"updated\""));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_rolling_requests_patch_data() {
+        let _m1 = mock("PATCH", "/patch")
+            .with_status(200)
+            .match_header("content-type", "application/json")
+            .match_body(r#"{"key": "value"}"#)
+            .with_header("content-type", "application/json")
+            .with_body(r#"{"status": "patched"}"#)
+            .create();
+
+        let mut rolling_requests = RollingRequestsBuilder::new()
+            .simultaneous_limit(1)
+            .timeout(Duration::from_millis(1))
+            .build();
+
+        let url = &mockito::server_url();
+        let mut request = Request::new(&format!("{}/patch", url), Method::PATCH);
+        request.set_post_data(Some(r#"{"key": "value"}"#));
+
+        // Set the content-type header
+        let mut headers = std::collections::HashMap::new();
+        headers.insert("content-type".to_string(), "application/json".to_string());
+        request.set_headers(headers);
+
+        rolling_requests.add_request(request);
+
+        let responses = rolling_requests.execute_requests().await;
+        assert_eq!(responses.len(), 1);
+
+        for response in responses {
+            assert!(response.is_ok());
+            let text = response.unwrap().text().await.unwrap();
+            assert!(text.contains("\"status\": \"patched\""));
+        }
+    }
 }
