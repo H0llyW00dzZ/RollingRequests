@@ -239,8 +239,9 @@ impl RollingRequests {
                 .collect()
         };
 
-        for req in requests_to_process {
+        for req in &requests_to_process {
             let client = self.client.clone();
+            let req = req.clone();
 
             let handle = task::spawn(async move {
                 let mut req_builder = client.request(req.method.clone(), &req.url);
@@ -275,52 +276,11 @@ impl RollingRequests {
             }
         }
 
-        responses
-    }
-
-    /// Removes a specified number of processed requests from the pending list.
-    ///
-    /// This method is used to clear requests that have already been executed,
-    /// allowing new requests to be added and executed in subsequent batches.
-    ///
-    /// #### Arguments
-    ///
-    /// * `count` - The number of requests to remove from the start of the pending list.
-    ///
-    /// #### Examples
-    ///
-    /// ```
-    /// use rollingrequests::request::Request;
-    /// use rollingrequests::rolling::RollingRequestsBuilder;
-    /// use reqwest::Method;
-    /// use tokio;
-    ///
-    /// #[tokio::main]
-    /// async fn main() {
-    ///     let mut rolling_requests = RollingRequestsBuilder::new()
-    ///         .simultaneous_limit(2)
-    ///         .build();
-    ///
-    ///     let url = "http://example.com";
-    ///
-    ///     // Add requests to the queue
-    ///     for _ in 0..5 {
-    ///         let request = Request::new(url, Method::GET);
-    ///         rolling_requests.add_request(request);
-    ///     }
-    ///
-    ///     // Execute requests
-    ///     let responses = rolling_requests.execute_requests().await;
-    ///
-    ///     // Clear processed requests
-    ///     rolling_requests.clear_processed_requests(responses.len());
-    /// }
-    /// ```
-    ///
-    /// This ensures that the pending list only contains requests that have not yet been processed,
-    /// maintaining an accurate queue for execution.
-    pub fn clear_processed_requests(&self, count: usize) {
+        // Automatically clear processed requests
+        let count = requests_to_process.len();
         let mut pending = self.pending_requests.lock().unwrap();
         pending.drain(0..count);
+
+        responses
     }
 }
