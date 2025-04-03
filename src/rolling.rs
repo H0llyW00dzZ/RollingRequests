@@ -270,9 +270,9 @@ impl RollingRequests {
         }
 
         for handle in handles {
-            match handle.await {
-                Ok(response) => responses.push(response),
-                Err(e) => eprintln!("Task failed: {:?}", e),
+            // Errors should now be handled by the caller when they occur
+            if let Ok(response) = handle.await {
+                responses.push(response);
             }
         }
 
