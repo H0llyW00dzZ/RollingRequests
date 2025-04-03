@@ -5,6 +5,9 @@ edition = "2024"
 license = "BSD-3-Clause"
 authors = ["H0llyW00dzZ <h0llyw00dzz@pm.me>"]
 rust-version = "1.86"
+description = "A Rust library for efficiently managing and executing HTTP requests with concurrency control"
+repository = "https://github.com/H0llyW00dzZ/RollingRequests"
+keywords = ["http", "requests", "concurrency", "rust", "async"]
 
 [dependencies]
 reqwest = { version = "0.11", features = ["json", "blocking"] }
