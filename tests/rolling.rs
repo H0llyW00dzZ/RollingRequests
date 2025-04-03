@@ -2,7 +2,8 @@
 mod tests {
     use mockito::mock;
     use reqwest::Method;
-    use rollingrequests::{request::Request, rolling::RollingRequests};
+    use rollingrequests::{request::Request, rolling::RollingRequestsBuilder};
+    use std::time::Duration;
     use tokio;
 
     #[tokio::test]
@@ -12,7 +13,10 @@ mod tests {
             .with_body(r#"{"url": "http://mockito.org/get"}"#)
             .create();
 
-        let mut rolling_requests = RollingRequests::new(2);
+        let mut rolling_requests = RollingRequestsBuilder::new()
+            .simultaneous_limit(2)
+            .timeout(Duration::from_millis(1))
+            .build();
 
         let url = &mockito::server_url();
 
@@ -52,7 +56,10 @@ mod tests {
             .with_body(r#"{"url": "http://mockito.org/get"}"#)
             .create();
 
-        let mut rolling_requests = RollingRequests::new(2);
+        let mut rolling_requests = RollingRequestsBuilder::new()
+            .simultaneous_limit(2)
+            .timeout(Duration::from_millis(1))
+            .build();
 
         let url = &mockito::server_url();
         let request1 = Request::new(&format!("{}/get", url), Method::GET);
@@ -79,7 +86,10 @@ mod tests {
             .with_body(r#"{"status": "success"}"#)
             .create();
 
-        let mut rolling_requests = RollingRequests::new(1);
+        let mut rolling_requests = RollingRequestsBuilder::new()
+            .simultaneous_limit(1)
+            .timeout(Duration::from_millis(1))
+            .build();
 
         let url = &mockito::server_url();
         let mut request = Request::new(&format!("{}/post", url), Method::POST);
@@ -105,7 +115,10 @@ mod tests {
             .with_body(r#"{"status": "success"}"#)
             .create();
 
-        let mut rolling_requests = RollingRequests::new(2);
+        let mut rolling_requests = RollingRequestsBuilder::new()
+            .simultaneous_limit(2)
+            .timeout(Duration::from_millis(1))
+            .build();
 
         let url = &mockito::server_url();
 
@@ -137,5 +150,37 @@ mod tests {
         }
 
         assert_eq!(total_responses, 5);
+    }
+
+    #[tokio::test]
+    async fn test_task_failure_handling() {
+        // Use a non-routable IP address to trigger a timeout error
+        let invalid_url = "http://192.0.2.0"; // 192.0.2.0/24 is reserved for documentation
+
+        let mut rolling_requests = RollingRequestsBuilder::new()
+            .simultaneous_limit(1)
+            .timeout(Duration::from_millis(1))
+            .build();
+
+        let request = Request::new(invalid_url, Method::GET);
+
+        rolling_requests.add_request(request);
+
+        let responses = rolling_requests.execute_requests().await;
+        assert_eq!(responses.len(), 1);
+
+        for response in responses {
+            match response {
+                Ok(_) => {
+                    // This block should not be executed in case of a simulated failure
+                    assert!(false, "Expected task to fail but it succeeded");
+                }
+                Err(err) => {
+                    // Check if the error is a timeout
+                    eprintln!("Task failed as expected: {:?}", err);
+                    assert!(err.is_timeout());
+                }
+            }
+        }
     }
 }

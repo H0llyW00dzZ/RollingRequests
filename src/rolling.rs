@@ -9,7 +9,10 @@ use reqwest::{
     Client,
     header::{HeaderMap, HeaderName, HeaderValue},
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tokio::task;
 
 /// A struct to manage and execute HTTP requests with a concurrency limit.
@@ -22,25 +25,77 @@ pub struct RollingRequests {
     client: Client,
 }
 
+/// Configuration for `RollingRequests`.
+pub struct RollingRequestsConfig {
+    pub simultaneous_limit: usize,
+    pub timeout: Duration,
+}
+
+impl Default for RollingRequestsConfig {
+    fn default() -> Self {
+        RollingRequestsConfig {
+            simultaneous_limit: 1,            // Default limit
+            timeout: Duration::from_secs(30), // Default timeout
+        }
+    }
+}
+
+/// Builder for `RollingRequests`.
+pub struct RollingRequestsBuilder {
+    config: RollingRequestsConfig,
+}
+
+impl RollingRequestsBuilder {
+    /// Creates a new builder with default configuration.
+    pub fn new() -> Self {
+        RollingRequestsBuilder {
+            config: RollingRequestsConfig::default(),
+        }
+    }
+
+    /// Sets the simultaneous request limit.
+    pub fn simultaneous_limit(mut self, limit: usize) -> Self {
+        self.config.simultaneous_limit = limit;
+        self
+    }
+
+    /// Sets the request timeout duration.
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.config.timeout = timeout;
+        self
+    }
+
+    /// Builds the `RollingRequests` instance.
+    pub fn build(self) -> RollingRequests {
+        RollingRequests::new(self.config)
+    }
+}
+
 impl RollingRequests {
-    /// Creates a new `RollingRequests` instance with a specified concurrency limit.
+    /// Creates a new `RollingRequests` instance with the specified configuration.
     ///
     /// #### Arguments
     ///
-    /// * `simultaneous_limit` - The maximum number of requests to execute at the same time.
+    /// * `config` - The configuration for the requests.
     ///
     /// #### Examples
     ///
     /// ```
-    /// use rollingrequests::rolling::RollingRequests;
+    /// use rollingrequests::rolling::RollingRequestsBuilder;
+    /// use std::time::Duration;
     ///
-    /// let rolling_requests = RollingRequests::new(5);
+    /// let rolling_requests = RollingRequestsBuilder::new()
+    ///     .simultaneous_limit(5)
+    ///     .timeout(Duration::from_secs(10))
+    ///     .build();
     /// ```
-    pub fn new(simultaneous_limit: usize) -> Self {
+    pub fn new(config: RollingRequestsConfig) -> Self {
+        let client = Client::builder().timeout(config.timeout).build().unwrap();
+
         RollingRequests {
-            simultaneous_limit,
+            simultaneous_limit: config.simultaneous_limit,
             pending_requests: Arc::new(Mutex::new(Vec::new())),
-            client: Client::new(),
+            client,
         }
     }
 
@@ -53,11 +108,12 @@ impl RollingRequests {
     /// #### Examples
     ///
     /// ```
-    /// use rollingrequests::rolling::RollingRequests;
+    /// use rollingrequests::rolling::RollingRequestsBuilder;
     /// use rollingrequests::request::Request;
     /// use reqwest::Method;
+    /// use std::time::Duration;
     ///
-    /// let mut rolling_requests = RollingRequests::new(5);
+    /// let mut rolling_requests = RollingRequestsBuilder::new().build();
     /// let request = Request::new("http://example.com", Method::GET);
     /// rolling_requests.add_request(request);
     /// ```
@@ -75,13 +131,15 @@ impl RollingRequests {
     ///
     /// ```
     /// use rollingrequests::request::Request;
-    /// use rollingrequests::rolling::RollingRequests;
+    /// use rollingrequests::rolling::RollingRequestsBuilder;
     /// use reqwest::Method;
     /// use tokio;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut rolling_requests = RollingRequests::new(2);
+    ///     let mut rolling_requests = RollingRequestsBuilder::new()
+    ///         .simultaneous_limit(2)
+    ///         .build();
     ///
     ///     let url = "http://example.com";
     ///
@@ -166,13 +224,15 @@ impl RollingRequests {
     ///
     /// ```
     /// use rollingrequests::request::Request;
-    /// use rollingrequests::rolling::RollingRequests;
+    /// use rollingrequests::rolling::RollingRequestsBuilder;
     /// use reqwest::Method;
     /// use tokio;
     ///
     /// #[tokio::main]
     /// async fn main() {
-    ///     let mut rolling_requests = RollingRequests::new(2);
+    ///     let mut rolling_requests = RollingRequestsBuilder::new()
+    ///         .simultaneous_limit(2)
+    ///         .build();
     ///
     ///     let url = "http://example.com";
     ///
