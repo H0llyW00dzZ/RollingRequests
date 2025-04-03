@@ -39,7 +39,7 @@ impl Request {
     /// ```
     /// use rollingrequests::request::Request;
     /// use reqwest::Method;
-    /// 
+    ///
     /// let request = Request::new("http://example.com", Method::GET);
     /// ```
     pub fn new(url: &str, method: Method) -> Self {
@@ -108,8 +108,8 @@ impl Request {
     }
 
     /// Sets the POST data for the request.
-    pub fn set_post_data(&mut self, post_data: &str) -> &mut Self {
-        self.post_data = Some(post_data.to_string());
+    pub fn set_post_data(&mut self, post_data: Option<&str>) -> &mut Self {
+        self.post_data = post_data.map(|s| s.to_string());
         self
     }
 
