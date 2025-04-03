@@ -3,6 +3,8 @@ mod tests {
     use mockito::mock;
     use reqwest::Method;
     use rollingrequests::{request::Request, rolling::RollingRequestsBuilder};
+    use std::fs::{OpenOptions, remove_file};
+    use std::io::Write;
     use std::time::Duration;
     use tokio;
 
@@ -30,9 +32,8 @@ mod tests {
         let mut total_responses = 0;
         while total_responses < 5 {
             let responses = rolling_requests.execute_requests().await;
-            let responses_len = responses.len(); // Store the length before moving
 
-            assert!(responses_len <= 2);
+            assert!(responses.len() <= 2);
 
             for response in responses {
                 if let Ok(resp) = response {
@@ -41,9 +42,6 @@ mod tests {
                     total_responses += 1;
                 }
             }
-
-            // Clear the processed requests
-            rolling_requests.clear_processed_requests(responses_len);
         }
 
         assert_eq!(total_responses, 5);
@@ -133,9 +131,8 @@ mod tests {
         let mut total_responses = 0;
         while total_responses < 5 {
             let responses = rolling_requests.execute_requests().await;
-            let responses_len = responses.len(); // Store the length before moving
 
-            assert!(responses_len <= 2);
+            assert!(responses.len() <= 2);
 
             for response in responses {
                 if let Ok(resp) = response {
@@ -144,9 +141,6 @@ mod tests {
                     total_responses += 1;
                 }
             }
-
-            // Clear the processed requests
-            rolling_requests.clear_processed_requests(responses_len);
         }
 
         assert_eq!(total_responses, 5);
@@ -254,5 +248,60 @@ mod tests {
             let text = response.unwrap().text().await.unwrap();
             assert!(text.contains("\"status\": \"patched\""));
         }
+    }
+
+    #[tokio::test]
+    async fn test_batch_post_execution_to_file() {
+        let _m1 = mock("POST", "/post")
+            .with_status(200)
+            .match_body(r#"{"key": "value"}"#)
+            .with_body(r#"{"status": "success"}"#)
+            .create();
+
+        let mut rolling_requests = RollingRequestsBuilder::new()
+            .simultaneous_limit(2)
+            .timeout(Duration::from_millis(1))
+            .build();
+
+        let url = &mockito::server_url();
+
+        // Add 5 POST requests to simulate a batch process
+        for _ in 0..5 {
+            let mut request = Request::new(&format!("{}/post", url), Method::POST);
+            request.set_post_data(Some(r#"{"key": "value"}"#));
+            rolling_requests.add_request(request);
+        }
+
+        let file_path = "responses.txt";
+
+        // Open a file to write responses
+        let mut file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(file_path)
+            .unwrap();
+
+        // Execute requests in batches of 2
+        let mut total_responses = 0;
+        while total_responses < 5 {
+            let responses = rolling_requests.execute_requests().await;
+
+            assert!(responses.len() <= 2);
+
+            for response in responses {
+                if let Ok(resp) = response {
+                    let text = resp.text().await.unwrap();
+                    assert!(text.contains("\"status\": \"success\""));
+                    writeln!(file, "{}", text).unwrap(); // Write response to file
+                    total_responses += 1;
+                }
+            }
+        }
+
+        assert_eq!(total_responses, 5);
+
+        // Clean up the file
+        remove_file(file_path).unwrap();
     }
 }
