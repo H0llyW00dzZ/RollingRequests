@@ -3,9 +3,10 @@ mod tests {
     use mockito::mock;
     use reqwest::Method;
     use rollingrequests::{request::Request, rolling::RollingRequestsBuilder};
-    use std::fs::{OpenOptions, remove_file};
+    use std::fs::{File, OpenOptions, remove_file};
     use std::io::Write;
     use std::time::Duration;
+    use tempfile::tempdir;
     use tokio;
 
     #[tokio::test]
@@ -303,5 +304,45 @@ mod tests {
 
         // Clean up the file
         remove_file(file_path).unwrap();
+    }
+
+    #[tokio::test]
+    // TODO: Enhance the test to verify file/form data received by the server.
+    // This is challenging due to limitations in mocking capabilities and my newness to Rust.
+    async fn test_rolling_requests_with_multipart_form_data() {
+        let _m1 = mock("POST", "/upload")
+            .with_status(200)
+            .with_body(r#"{"status": "uploaded"}"#)
+            .create();
+
+        let mut rolling_requests = RollingRequestsBuilder::new()
+            .simultaneous_limit(1)
+            .timeout(Duration::from_secs(5))
+            .build();
+
+        let url = &mockito::server_url();
+        let mut request = Request::new(&format!("{}/upload", url), Method::POST);
+
+        let dir = tempdir().expect("Failed to create temp dir");
+        let file_path = dir.path().join("file.txt");
+
+        let mut file = File::create(&file_path).expect("Failed to create temp file");
+        writeln!(file, "This is a test file").expect("Failed to write to temp file");
+
+        request.add_form_text("field", "value");
+        request.add_form_file("file", &file_path);
+
+        rolling_requests.add_request(request);
+
+        let responses = rolling_requests.execute_requests().await;
+        assert_eq!(responses.len(), 1);
+
+        for response in responses {
+            assert!(response.is_ok());
+            let text = response.unwrap().text().await.unwrap();
+            assert!(text.contains("\"status\": \"uploaded\""));
+        }
+
+        dir.close().expect("Failed to remove temp dir");
     }
 }

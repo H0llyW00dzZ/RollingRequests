@@ -259,7 +259,9 @@ impl RollingRequests {
                     req_builder = req_builder.headers(header_map);
                 }
 
-                if let Some(data) = &req.post_data {
+                if let Some(form) = req.multipart_form_data {
+                    req_builder = req_builder.multipart(form);
+                } else if let Some(data) = &req.post_data {
                     req_builder = req_builder.body(data.clone());
                 }
 
